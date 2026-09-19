@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Konversi File — ubah format file langsung di browser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EEF0EA; --panel:#FFFFFF; --ink:#1B231F; --muted:#5C6B62; --line:#D8DBD1;
+    --accent:#2F6F5E; --accent-ink:#123028; --amber:#C98A2E;
+    --mono:'IBM Plex Mono', monospace; --sans:'IBM Plex Sans', sans-serif; --display:'Fraunces', serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);}
+  .wrap{max-width:1080px;margin:0 auto;padding:36px 24px 80px;}
+  header.top{padding-bottom:24px;border-bottom:1px solid var(--line);margin-bottom:28px;}
+  header.top h1{font-family:var(--display);font-weight:500;font-size:30px;margin:0;letter-spacing:-0.01em;}
+  header.top p{margin:8px 0 0;color:var(--muted);font-size:14.5px;max-width:56ch;}
+  header.top .privacy{display:inline-flex;align-items:center;gap:8px;margin-top:14px;font-size:12.5px;color:var(--accent-ink);}
+  header.top .privacy .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+
+  .layout{display:grid;grid-template-columns:210px 1fr;gap:36px;align-items:start;}
+  @media (max-width:760px){ .layout{grid-template-columns:1fr;} }
+
+  nav.rail{display:flex;flex-direction:column;gap:2px;position:sticky;top:24px;}
+  @media (max-width:760px){ nav.rail{position:static;flex-direction:row;overflow-x:auto;gap:0;padding-bottom:8px;border-bottom:1px solid var(--line);} }
+  nav.rail button{display:flex;align-items:center;gap:10px;background:none;border:none;text-align:left;font-family:var(--sans);font-size:14.5px;color:var(--muted);padding:9px 6px;cursor:pointer;white-space:nowrap;border-radius:2px;}
+  nav.rail button .tick{width:3px;height:14px;background:var(--line);flex:none;transition:background .15s, height .15s;}
+  nav.rail button:hover{color:var(--ink);}
+  nav.rail button.active{color:var(--ink);font-weight:600;}
+  nav.rail button.active .tick{background:var(--amber);height:20px;}
+
+  main.panel{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:32px;min-height:420px;}
+  main.panel h2{font-family:var(--display);font-weight:500;font-size:22px;margin:0 0 4px;}
+  main.panel .sub{color:var(--muted);font-size:13.5px;margin:0 0 24px;}
+
+  .dropzone{border:1px dashed var(--line);border-radius:3px;padding:28px;text-align:center;cursor:pointer;transition:border-color .15s, background .15s;position:relative;}
+  .dropzone:hover, .dropzone.over{border-color:var(--accent);background:#FAFBF8;}
+  .dropzone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;}
+  .dropzone .hint{font-size:13.5px;color:var(--muted);}
+  .dropzone .filename{margin-top:8px;font-family:var(--mono);font-size:13px;color:var(--accent-ink);word-break:break-all;}
+
+  .options{display:flex;gap:20px;flex-wrap:wrap;margin-top:18px;}
+  .options label{font-size:12.5px;color:var(--muted);display:block;margin-bottom:6px;}
+  .options select{font-family:var(--sans);font-size:13.5px;border:1px solid var(--line);border-radius:2px;padding:7px 8px;background:#fff;}
+
+  button.action{font-family:var(--sans);font-size:14px;font-weight:500;color:#fff;background:var(--accent);border:none;border-radius:2px;padding:11px 20px;cursor:pointer;margin-top:20px;}
+  button.action:disabled{background:#B9C2BB;cursor:not-allowed;}
+  button.action:not(:disabled):hover{background:var(--accent-ink);}
+
+  .status{font-size:13px;color:var(--muted);margin-top:14px;min-height:18px;}
+  .status.err{color:#B23A3A;}
+
+  a.download{display:inline-flex;align-items:center;gap:8px;margin-top:16px;font-family:var(--sans);font-size:14px;font-weight:500;color:var(--accent-ink);border:1px solid var(--accent);border-radius:2px;padding:10px 18px;text-decoration:none;}
+  a.download:hover{background:var(--accent);color:#fff;}
+
+  .note{font-size:12.5px;color:var(--muted);margin-top:22px;padding-top:16px;border-top:1px solid var(--line);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Konversi File</h1>
+    <p>PDF, Word, gambar, dan spreadsheet — ubah formatnya tanpa mengunggah ke server mana pun.</p>
+    <div class="privacy"><span class="dot"></span>Semua konversi diproses langsung di browser kamu, filenya tidak pernah dikirim ke server.</div>
+  </header>
+  <div class="layout">
+    <nav class="rail" id="rail"></nav>
+    <main class="panel" id="panel"></main>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.2/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const tools = [
+  { key:"gambar", title:"Gambar ke gambar" },
+  { key:"gambar-pdf", title:"Gambar ke PDF" },
+  { key:"pdf-gambar", title:"PDF ke gambar" },
+  { key:"word-pdf", title:"Word ke PDF" },
+  { key:"pdf-word", title:"PDF ke Word" },
+  { key:"word-teks", title:"Word ke teks" },
+  { key:"sheet", title:"Excel ke CSV / CSV ke Excel" },
+];
+
+let state = { tool: "gambar", file: null, files: null };
+
+const rail = document.getElementById("rail");
+function renderNav(){
+  rail.innerHTML = "";
+  tools.forEach(t=>{
+    const btn = document.createElement("button");
+    btn.className = t.key === state.tool ? "active" : "";
+    btn.innerHTML = `<span class="tick"></span><span>${t.title}</span>`;
+    btn.addEventListener("click", ()=>{ state.tool = t.key; state.file=null; state.files=null; renderNav(); renderPanel(); });
+    rail.appendChild(btn);
+  });
+}
+
+function baseName(name){ return name.replace(/\.[^.]+$/, ""); }
+function ext(name){ const m = name.match(/\.([^.]+)$/); return m ? m[1].toLowerCase() : ""; }
+
+function makeDropzone(accept, multiple, onFiles){
+  const id = "drop_" + Math.random().toString(36).slice(2);
+  const html = `
+    <div class="dropzone" id="${id}">
+      <input type="file" id="${id}_input" accept="${accept}" ${multiple?"multiple":""}>
+      <p class="hint">Klik atau seret file ke sini</p>
+      <p class="filename" id="${id}_name"></p>
+    </div>`;
+  setTimeout(()=>{
+    const zone = document.getElementById(id);
+    const input = document.getElementById(id+"_input");
+    const nameEl = document.getElementById(id+"_name");
+    input.addEventListener("change", ()=>{
+      if (input.files.length){
+        nameEl.textContent = multiple ? `${input.files.length} file dipilih` : input.files[0].name;
+        onFiles(multiple ? Array.from(input.files) : input.files[0]);
+      }
+    });
+    ["dragover","dragenter"].forEach(ev=> zone.addEventListener(ev, e=>{ e.preventDefault(); zone.classList.add("over"); }));
+    ["dragleave","drop"].forEach(ev=> zone.addEventListener(ev, e=>{ e.preventDefault(); zone.classList.remove("over"); }));
+    zone.addEventListener("drop", e=>{
+      const dtFiles = Array.from(e.dataTransfer.files);
+      if (dtFiles.length){
+        input.files = e.dataTransfer.files;
+        nameEl.textContent = multiple ? `${dtFiles.length} file dipilih` : dtFiles[0].name;
+        onFiles(multiple ? dtFiles : dtFiles[0]);
+      }
+    });
+  }, 0);
+  return html;
+}
+
+function downloadLink(blob, filename, label){
+  const url = URL.createObjectURL(blob);
+  return `<a class="download" href="${url}" download="${filename}">${label || ("Unduh " + filename)}</a>`;
+}
+
+const panel = document.getElementById("panel");
+
+function renderPanel(){
+  const key = state.tool;
+  if (key==="gambar") renderImageConvert();
+  else if (key==="gambar-pdf") renderImagesToPdf();
+  else if (key==="pdf-gambar") renderPdfToImages();
+  else if (key==="word-pdf") renderWordToPdf();
+  else if (key==="pdf-word") renderPdfToWord();
+  else if (key==="word-teks") renderWordToText();
+  else if (key==="sheet") renderSheetConvert();
+}
+
+/* ---------------- 1. Gambar ke gambar ---------------- */
+function renderImageConvert(){
+  panel.innerHTML = `
+    <h2>Gambar ke gambar</h2>
+    <p class="sub">Ubah format PNG, JPG, atau WEBP. Berlaku untuk satu file.</p>
+    ${makeDropzone("image/*", false, f=>{ state.file=f; refresh(); })}
+    <div class="options">
+      <div><label>Format tujuan</label>
+        <select id="fmt">
+          <option value="image/png">PNG</option>
+          <option value="image/jpeg">JPG</option>
+          <option value="image/webp">WEBP</option>
+        </select>
+      </div>
+    </div>
+    <button class="action" id="go" disabled>Konversi</button>
+    <p class="status" id="status"></p>
+    <div id="result"></div>
+    <p class="note">Format keluaran terbatas pada PNG/JPG/WEBP karena itu yang didukung langsung oleh browser.</p>
+  `;
+  const go = panel.querySelector("#go");
+  function refresh(){ go.disabled = !state.file; }
+  go.addEventListener("click", async ()=>{
+    const status = panel.querySelector("#status");
+    status.textContent = "Memproses…"; status.className="status";
+    try{
+      const mime = panel.querySelector("#fmt").value;
+      const img = new Image();
+      const url = URL.createObjectURL(state.file);
+      await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=url; });
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      canvas.getContext("2d").drawImage(img,0,0);
+      canvas.toBlob(blob=>{
+        if (!blob){ status.textContent="Gagal mengonversi gambar ini."; status.className="status err"; return; }
+        const extMap = {"image/png":"png","image/jpeg":"jpg","image/webp":"webp"};
+        const filename = baseName(state.file.name) + "." + extMap[mime];
+        panel.querySelector("#result").innerHTML = downloadLink(blob, filename);
+        status.textContent = "Selesai.";
+      }, mime, 0.92);
+    }catch(e){ status.textContent="Gagal memuat gambar ini."; status.className="status err"; }
+  });
+}
+
+/* ---------------- 2. Gambar ke PDF ---------------- */
+function renderImagesToPdf(){
+  panel.innerHTML = `
+    <h2>Gambar ke PDF</h2>
+    <p class="sub">Pilih beberapa gambar sekaligus — tiap gambar jadi satu halaman, urut sesuai pemilihan.</p>
+    ${makeDropzone("image/*", true, fs=>{ state.files=fs; refresh(); })}
+    <button class="action" id="go" disabled>Konversi ke PDF</button>
+    <p class="status" id="status"></p>
+    <div id="result"></div>
+  `;
+  const go = panel.querySelector("#go");
+  function refresh(){ go.disabled = !(state.files && state.files.length); }
+  go.addEventListener("click", async ()=>{
+    const status = panel.querySelector("#status");
+    status.textContent = "Menyusun halaman…"; status.className="status";
+    try{
+      const { jsPDF } = window.jspdf;
+      let doc = null;
+      for (let i=0;i<state.files.length;i++){
+        const f = state.files[i];
+        const img = new Image();
+        const u = URL.createObjectURL(f);
+        await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=u; });
+        const w = img.naturalWidth, h = img.naturalHeight;
+        if (!doc) doc = new jsPDF({ unit:"px", format:[w,h] });
+        else doc.addPage([w,h]);
+        const type = f.type.includes("png") ? "PNG" : "JPEG";
+        doc.addImage(img, type, 0, 0, w, h);
+      }
+      const blob = doc.output("blob");
+      panel.querySelector("#result").innerHTML = downloadLink(blob, "gambar.pdf");
+      status.textContent = "Selesai.";
+    }catch(e){ status.textContent="Gagal membuat PDF dari gambar ini."; status.className="status err"; }
+  });
+}
+
+/* ---------------- 3. PDF ke gambar ---------------- */
+function renderPdfToImages(){
+  panel.innerHTML = `
+    <h2>PDF ke gambar</h2>
+    <p class="sub">Tiap halaman PDF diubah jadi PNG, lalu dibungkus dalam satu file ZIP.</p>
+    ${makeDropzone("application/pdf", false, f=>{ state.file=f; refresh(); })}
+    <button class="action" id="go" disabled>Konversi</button>
+    <p class="status" id="status"></p>
+    <div id="result"></div>
+  `;
+  const go = panel.querySelector("#go");
+  function refresh(){ go.disabled = !state.file; }
+  go.addEventListener("click", async ()=>{
+    const status = panel.querySelector("#status");
+    status.className="status";
+    try{
+      const buf = await state.file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+      const zip = new JSZip();
+      for (let p=1;p<=pdf.numPages;p++){
+        status.textContent = `Merender halaman ${p} dari ${pdf.numPages}…`;
+        const page = await pdf.getPage(p);
+        const viewport = page.getViewport({scale:2});
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width; canvas.height = viewport.height;
+        await page.render({canvasContext:canvas.getContext("2d"), viewport}).promise;
+        const blob = await new Promise(res=>canvas.toBlob(res, "image/png"));
+        zip.file(`halaman-${String(p).padStart(2,"0")}.png`, blob);
+      }
+      status.textContent = "Menyusun ZIP…";
+      const zipBlob = await zip.generateAsync({type:"blob"});
+      panel.querySelector("#result").innerHTML = downloadLink(zipBlob, baseName(state.file.name)+"-gambar.zip");
+      status.textContent = "Selesai.";
+    }catch(e){ status.textContent="Gagal membaca PDF ini."; status.className="status err"; }
+  });
+}
+
+/* ---------------- 4. Word ke PDF ---------------- */
+function renderWordToPdf(){
+  panel.innerHTML = `
+    <h2>Word ke PDF</h2>
+    <p class="sub">Mengambil isi dokumen .docx (teks, judul, daftar) lalu menatanya ulang sebagai PDF.</p>
+    ${makeDropzone(".docx", false, f=>{ state.file=f; refresh(); })}
+    <button class="action" id="go" disabled>Konversi ke PDF</button>
+    <p class="status" id="status"></p>
+    <div id="result"></div>
+    <p class="note">Hasil PDF berupa render visual dari isi dokumen; format kompleks seperti kolom ganda atau objek gambar tersemat mungkin tidak sama persis dengan aslinya.</p>
+  `;
+  const go = panel.querySelector("#go");
+  function refresh(){ go.disabled = !state.file; }
+  go.addEventListener("click", async ()=>{
+    const status = panel.querySelector("#status");
+    status.textContent = "Membaca dokumen…"; status.className="status";
+    try{
+      const buf = await state.file.arrayBuffer();
+      const result = await mammoth.convertToHtml({arrayBuffer: buf});
+      const holder = document.createElement("div");
+      holder.style.cssText = "position:fixed;left:-9999px;top:0;width:700px;padding:20px;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;color:#111;";
+      holder.innerHTML = result.value;
+      document.body.appendChild(holder);
+      status.textContent = "Menata halaman PDF…";
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({unit:"pt", format:"a4"});
+      await doc.html(holder, {
+        x:30, y:30, width:535, windowWidth:700,
+        callback: function(doc){
+          document.body.removeChild(holder);
+          const blob = doc.output("blob");
+          panel.querySelector("#result").innerHTML = downloadLink(blob, baseName(state.file.name)+".pdf");
+          status.textContent = "Selesai.";
+        }
+      });
+    }catch(e){ status.textContent="Gagal mengonversi dokumen ini."; status.className="status err"; }
+  });
+}
+
+/* ---------------- 5. PDF ke Word ---------------- */
+function renderPdfToWord(){
+  panel.innerHTML = `
+    <h2>PDF ke Word</h2>
+    <p class="sub">Mengekstrak teks dari PDF menjadi dokumen .docx yang bisa dibuka dan diedit di Word.</p>
+    ${makeDropzone("application/pdf", false, f=>{ state.file=f; refresh(); })}
+    <button class="action" id="go" disabled>Konversi ke Word</button>
+    <p class="status" id="status"></p>
+    <div id="result"></div>
+    <p class="note">Hanya teks yang diambil — tata letak, tabel, gambar, dan pemformatan asli PDF tidak ikut disalin.</p>
+  `;
+  const go = panel.querySelector("#go");
+  function refresh(){ go.disabled = !state.file; }
+  go.addEventListener("click", async ()=>{
+    const status = panel.querySelector("#status");
+    status.className="status";
+    try{
+      const buf = await state.file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+      let paragraphsXml = "";
+      for (let p=1;p<=pdf.numPages;p++){
+        status.textContent = `Mengekstrak teks halaman ${p} dari ${pdf.numPages}…`;
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        const lines = {};
+        content.items.forEach(item=>{
+          const y = Math.round(item.transform[5]);
+          if (!lines[y]) lines[y] = [];
+          lines[y].push(item.str);
+        });
+        const orderedY = Object.keys(lines).map(Number).sort((a,b)=>b-a);
+        orderedY.forEach(y=>{
+          const text = lines[y].join(" ").trim();
+          if (text) paragraphsXml += `<w:p><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+        });
+        if (p < pdf.numPages) paragraphsXml += `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+      }
+      if (!paragraphsXml) paragraphsXml = `<w:p><w:r><w:t>(Tidak ada teks yang bisa diekstrak dari PDF ini — kemungkinan berupa hasil pindaian gambar.)</w:t></w:r></w:p>`;
+
+      status.textContent = "Menyusun file .docx…";
+      const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>${paragraphsXml}<w:sectPr/></w:body>
+</w:document>`;
+      const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+      const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+      const zip = new JSZip();
+      zip.file("[Content_Types].xml", contentTypes);
+      zip.folder("_rels").file(".rels", rels);
+      zip.folder("word").file("document.xml", docXml);
+      const blob = await zip.generateAsync({type:"blob", mimeType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
+      panel.querySelector("#result").innerHTML = downloadLink(blob, baseName(state.file.name)+".docx");
+      status.textContent = "Selesai.";
+    }catch(e){ status.textContent="Gagal membaca PDF ini."; status.className="status err"; }
+  });
+}
+function escapeXml(s){
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;");
+}
+
+/* ---------------- 6. Word ke teks ---------------- */
+function renderWordToText(){
+  panel.innerHTML = `
+    <h2>Word ke teks</h2>
+    <p class="sub">Mengambil seluruh teks polos dari dokumen .docx, tanpa pemformatan.</p>
+    ${makeDropzone(".docx", false, f=>{ state.file=f; refresh(); })}
+    <button class="action" id="go" disabled>Konversi ke .txt</button>
+    <p class="status" id="status"></p>
+    <div id="result"></div>
+  `;
+  const go = panel.querySelector("#go");
+  function refresh(){ go.disabled = !state.file; }
+  go.addEventListener("click", async ()=>{
+    const status = panel.querySelector("#status");
+    status.textContent = "Memproses…"; status.className="status";
+    try{
+      const buf = await state.file.arrayBuffer();
+      const result = await mammoth.extractRawText({arrayBuffer: buf});
+      const blob = new Blob([result.value], {type:"text/plain"});
+      panel.querySelector("#result").innerHTML = downloadLink(blob, baseName(state.file.name)+".txt");
+      status.textContent = "Selesai.";
+    }catch(e){ status.textContent="Gagal membaca dokumen ini."; status.className="status err"; }
+  });
+}
+
+/* ---------------- 7. Excel <-> CSV ---------------- */
+function renderSheetConvert(){
+  panel.innerHTML = `
+    <h2>Excel ke CSV / CSV ke Excel</h2>
+    <p class="sub">Unggah .xlsx untuk diubah ke .csv, atau .csv untuk diubah ke .xlsx. Hanya sheet pertama yang dipakai.</p>
+    ${makeDropzone(".xlsx,.xls,.csv", false, f=>{ state.file=f; refresh(); })}
+    <button class="action" id="go" disabled>Konversi</button>
+    <p class="status" id="status"></p>
+    <div id="result"></div>
+  `;
+  const go = panel.querySelector("#go");
+  function refresh(){ go.disabled = !state.file; }
+  go.addEventListener("click", async ()=>{
+    const status = panel.querySelector("#status");
+    status.textContent = "Memproses…"; status.className="status";
+    try{
+      const e = ext(state.file.name);
+      if (e === "csv"){
+        const text = await state.file.text();
+        const wb = XLSX.read(text, {type:"string"});
+        const out = XLSX.write(wb, {bookType:"xlsx", type:"array"});
+        const blob = new Blob([out], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+        panel.querySelector("#result").innerHTML = downloadLink(blob, baseName(state.file.name)+".xlsx");
+      } else {
+        const buf = await state.file.arrayBuffer();
+        const wb = XLSX.read(buf, {type:"array"});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const csv = XLSX.utils.sheet_to_csv(sheet);
+        const blob = new Blob([csv], {type:"text/csv"});
+        panel.querySelector("#result").innerHTML = downloadLink(blob, baseName(state.file.name)+".csv");
+      }
+      status.textContent = "Selesai.";
+    }catch(err){ status.textContent="Gagal membaca file ini."; status.className="status err"; }
+  });
+}
+
+renderNav();
+renderPanel();
+</script>
+</body>
+</html>
